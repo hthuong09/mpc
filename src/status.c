@@ -29,8 +29,8 @@
 
 void print_status (mpd_Connection *conn)
 {
-	mpd_Status * status;
-	mpd_InfoEntity * entity;
+	mpd_Status status;
+	mpd_InfoEntity entity;
 
 	mpd_sendCommandListOkBegin(conn);
 	printErrorAndExit(conn);
@@ -41,29 +41,26 @@ void print_status (mpd_Connection *conn)
 	mpd_sendCommandListEnd(conn);
 	printErrorAndExit(conn);
 
-	status = mpd_getStatus(conn);
+	mpd_getStatus_st(&status, conn);
 	printErrorAndExit(conn);
 
-	if(status->state == MPD_STATUS_STATE_PLAY || 
-			status->state == MPD_STATUS_STATE_PAUSE) 
+	if(status.state == MPD_STATUS_STATE_PLAY || 
+			status.state == MPD_STATUS_STATE_PAUSE) 
 	{
 		float perc;
 
 		mpd_nextListOkCommand(conn);
 		printErrorAndExit(conn);
 			
-		while((entity = mpd_getNextInfoEntity(conn))) {
-			mpd_Song * song = entity->info.song;
+		while(mpd_getNextInfoEntity_st(&entity,conn)) {
+			mpd_Song * song = entity.info.song;
 			
-			if(entity->type!=MPD_INFO_ENTITY_TYPE_SONG) {
-				mpd_freeInfoEntity(entity);
+			if(entity.type!=MPD_INFO_ENTITY_TYPE_SONG) {
 				continue;
 			}
 
 			pretty_print_song(song);
 			printf("\n");
-
-			mpd_freeInfoEntity(entity);
 
 			break;
 		}
@@ -73,45 +70,45 @@ void print_status (mpd_Connection *conn)
 		mpd_finishCommand(conn);
 		printErrorAndExit(conn);
 
-		if(status->state==MPD_STATUS_STATE_PLAY) {
+		if(status.state==MPD_STATUS_STATE_PLAY) {
 			printf("[playing]");
 		}
 		else printf("[paused] ");
 
-		perc = status->elapsedTime<status->totalTime ?
-				100.0*status->elapsedTime/status->totalTime :
+		perc = status.elapsedTime<status.totalTime ?
+				100.0*status.elapsedTime/status.totalTime :
 				100.0;
 
 
 		printf(" #%i/%i %3i:%02i/%i:%02i (%.0f%c)\n",
-				status->song+1,
-				status->playlistLength,
-				status->elapsedTime/60,
-				status->elapsedTime%60,
-				status->totalTime/60,
-				status->totalTime%60,
+				status.song+1,
+				status.playlistLength,
+				status.elapsedTime/60,
+				status.elapsedTime%60,
+				status.totalTime/60,
+				status.totalTime%60,
 				perc,'%');
 	}
 
-	if(status->updatingDb) {
-		printf("Updating DB (#%i) ...\n",status->updatingDb);
+	if(status.updatingDb) {
+		printf("Updating DB (#%i) ...\n",status.updatingDb);
 	}
 
-	if(status->volume!=MPD_STATUS_NO_VOLUME) {
-		printf("volume:%3i%c   ",status->volume,'%');
+	if(status.volume!=MPD_STATUS_NO_VOLUME) {
+		printf("volume:%3i%c   ",status.volume,'%');
 	}
 	else {
 		printf("volume: n/a   ");
 	}
 
 	printf("repeat: ");
-	if(status->repeat) printf("on    ");
+	if(status.repeat) printf("on    ");
 	else printf("off   ");
 
 	printf("random: ");
-	if(status->random) printf("on \n");
+	if(status.random) printf("on \n");
 	else printf("off\n");
 
-	mpd_freeStatus(status);
+	mpd_freeStatus_st(status);
 }
 

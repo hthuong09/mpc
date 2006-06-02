@@ -126,7 +126,7 @@ mpd_Connection * setup_connection ()
 	int host_env = 0;
 	int password_len= 0;
 	int parsed_len = 0;
-	mpd_Connection * conn;
+	static mpd_Connection conn;
 	
 	if((test = getenv("MPD_HOST"))) {
 		host =test;
@@ -147,19 +147,19 @@ mpd_Connection * setup_connection ()
 	}
 
 	parse_password(host, &password_len, &parsed_len);
-	
-	conn = mpd_newConnection(host+parsed_len,iport,10);
 
-	if(conn->error && (!port_env || !host_env)) 
+	mpd_newConnection_st(&conn,host+parsed_len,iport,10);
+
+	if(conn.error && (!port_env || !host_env)) 
 		fprintf(stderr,"MPD_HOST and/or MPD_PORT environment variables"
 			" are not set\n");
 	
-	printErrorAndExit(conn);
+	printErrorAndExit(&conn);
 
 	if(password_len) 
-		send_password (host, password_len, conn);
+		send_password (host, password_len, &conn);
 
-	return conn;
+	return &conn;
 }
 
 void print_status_and_exit () 
@@ -232,6 +232,7 @@ int main(int argc, char ** argv)
 			
 			free(array);
 			mpd_closeConnection(conn);
+			mpd_freeInfoEntityInfo_st();
 			fclose(stdout);
 			return EXIT_SUCCESS;
 		} else if (mpc_table[i].help) {

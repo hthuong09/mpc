@@ -69,18 +69,18 @@ SIMPLE_ONEARG_CMD(cmd_save, mpd_sendSaveCommand, 0)
 SIMPLE_ONEARG_CMD(cmd_rm, mpd_sendRmCommand, 0)
 
 static mpd_Status * getStatus(mpd_Connection * conn) {
-	mpd_Status * ret;
+	static mpd_Status ret;
 
 	mpd_sendStatusCommand(conn);
 	printErrorAndExit(conn);
 
-	ret = mpd_getStatus(conn);
+	mpd_getStatus_st(&ret,conn);
 	printErrorAndExit(conn);
 
 	mpd_finishCommand(conn);
 	printErrorAndExit(conn);
 
-	return ret;
+	return &ret;
 }
 
 int isUrl(char * s) {
@@ -100,7 +100,7 @@ int isUrl(char * s) {
 int cmd_add (int argc, char ** argv, mpd_Connection * conn ) 
 {
 	List ** lists;
-	mpd_InfoEntity * entity;
+	mpd_InfoEntity entity;
 	ListNode * node;
 	mpd_Song * song;
 	char * sp;
@@ -125,9 +125,9 @@ int cmd_add (int argc, char ** argv, mpd_Connection * conn )
 	mpd_sendListallCommand(conn,"");
 	printErrorAndExit(conn);
 
-	while((entity = mpd_getNextInfoEntity(conn))) {
-		if(entity->type==MPD_INFO_ENTITY_TYPE_SONG) {
-			song = entity->info.song;
+	while(mpd_getNextInfoEntity_st(&entity,conn)) {
+		if(entity.type==MPD_INFO_ENTITY_TYPE_SONG) {
+			song = entity.info.song;
 			sp = dup = strdup(fromUtf8(song->file));
 			while((sp = strchr(sp,' '))) *sp = '_';
 			len = strlen(dup);
@@ -147,7 +147,6 @@ int cmd_add (int argc, char ** argv, mpd_Connection * conn )
 			}
 			free(dup);
 		}
-		mpd_freeInfoEntity(entity);
 	}
 	my_finishCommand(conn);
 
@@ -190,7 +189,7 @@ int cmd_crop( int argc, char ** argv, mpd_Connection * conn )
 
 	if( status->playlistLength == 0 ) {
 
-		mpd_freeStatus(status);
+		mpd_freeStatus_st(status);
 		DIE( "You have to have a playlist longer than 1 song in length to crop" );
 
 	} else if( status->state == 3 || status->state == 2 ) { /* If playing or paused */
@@ -210,12 +209,12 @@ int cmd_crop( int argc, char ** argv, mpd_Connection * conn )
 
 		mpd_sendCommandListEnd( conn );
 		my_finishCommand( conn );
-		mpd_freeStatus( status );
+		mpd_freeStatus_st( status );
 		return ( 0 );
 
 	} else {
 
-		mpd_freeStatus(status);	
+		mpd_freeStatus_st(status);	
 		DIE( "You need to be playing to crop the playlist\n" );
 
 	}
@@ -502,7 +501,7 @@ int cmd_seek ( int argc, char ** argv, mpd_Connection * conn )
 	printErrorAndExit(conn);
 	my_finishCommand(conn);
 	printErrorAndExit(conn);
-	mpd_freeStatus(status);
+	mpd_freeStatus_st(status);
 	printErrorAndExit(conn);
 	return 1;
 }
@@ -530,15 +529,15 @@ int cmd_move ( int argc, char ** argv, mpd_Connection * conn )
 
 int cmd_playlist ( int argc, char ** argv, mpd_Connection * conn )
 {
-	mpd_InfoEntity * entity;
+	mpd_InfoEntity entity;
 	int count = 0;
 
 	mpd_sendPlaylistInfoCommand(conn,-1);
 	printErrorAndExit(conn);
 
-	while((entity = mpd_getNextInfoEntity(conn))) {
-		if(entity->type==MPD_INFO_ENTITY_TYPE_SONG) {
-			mpd_Song * song = entity->info.song;
+	while(mpd_getNextInfoEntity_st(&entity,conn)) {
+		if(entity.type==MPD_INFO_ENTITY_TYPE_SONG) {
+			mpd_Song * song = entity.info.song;
 
 			printf("#%i) ", 1+count);
 			pretty_print_song(song);
@@ -546,7 +545,6 @@ int cmd_playlist ( int argc, char ** argv, mpd_Connection * conn )
 
 			count++;
 		}
-		mpd_freeInfoEntity(entity);
 	}
 
 	my_finishCommand(conn);
@@ -556,7 +554,7 @@ int cmd_playlist ( int argc, char ** argv, mpd_Connection * conn )
 
 int cmd_listall ( int argc, char ** argv, mpd_Connection * conn )
 {
-	mpd_InfoEntity * entity;
+	mpd_InfoEntity entity;
 	char * listall = "";
 	int i=0;
 
@@ -566,12 +564,11 @@ int cmd_listall ( int argc, char ** argv, mpd_Connection * conn )
 		mpd_sendListallCommand(conn,listall);
 		printErrorAndExit(conn);
 
-		while((entity = mpd_getNextInfoEntity(conn))) {
-			if(entity->type==MPD_INFO_ENTITY_TYPE_SONG) {
-				mpd_Song * song = entity->info.song;
+		while(mpd_getNextInfoEntity_st(&entity,conn)) {
+			if(entity.type==MPD_INFO_ENTITY_TYPE_SONG) {
+				mpd_Song * song = entity.info.song;
 				printf("%s\n",fromUtf8(song->file));
 			}
-			mpd_freeInfoEntity(entity);
 		}
 
 		my_finishCommand(conn);
@@ -605,7 +602,7 @@ int cmd_update ( int argc, char ** argv, mpd_Connection * conn)
 
 int cmd_ls ( int argc, char ** argv, mpd_Connection * conn )
 {
-	mpd_InfoEntity * entity;
+	mpd_InfoEntity entity;
 	char * ls = "";
 	int i = 0;
 	char * sp;
@@ -619,9 +616,9 @@ int cmd_ls ( int argc, char ** argv, mpd_Connection * conn )
 		sp = ls;
 		while((sp = strchr(sp,' '))) *sp = '_';
 
-		while((entity = mpd_getNextInfoEntity(conn))) {
-			if(entity->type==MPD_INFO_ENTITY_TYPE_DIRECTORY) {
-				mpd_Directory * dir = entity->info.directory;
+		while(mpd_getNextInfoEntity_st(&entity,conn)) {
+			if(entity.type==MPD_INFO_ENTITY_TYPE_DIRECTORY) {
+				mpd_Directory * dir = entity.info.directory;
 				sp = dp = strdup(dir->path);
 				while((sp = strchr(sp,' '))) *sp = '_';
 				if(strcmp(dp,ls)==0) {
@@ -631,7 +628,6 @@ int cmd_ls ( int argc, char ** argv, mpd_Connection * conn )
 				}
 				free(dp);
 			}
-			mpd_freeInfoEntity(entity);
 		}
 
 		my_finishCommand(conn);
@@ -639,16 +635,15 @@ int cmd_ls ( int argc, char ** argv, mpd_Connection * conn )
 		mpd_sendLsInfoCommand(conn,ls);
 		printErrorAndExit(conn);
 
-		while((entity = mpd_getNextInfoEntity(conn))) {
-			if(entity->type==MPD_INFO_ENTITY_TYPE_DIRECTORY) {
-				mpd_Directory * dir = entity->info.directory;
+		while(mpd_getNextInfoEntity_st(&entity,conn)) {
+			if(entity.type==MPD_INFO_ENTITY_TYPE_DIRECTORY) {
+				mpd_Directory * dir = entity.info.directory;
 				printf("%s\n",fromUtf8(dir->path));
 			}
-			else if(entity->type==MPD_INFO_ENTITY_TYPE_SONG) {
-				mpd_Song * song = entity->info.song;
+			else if(entity.type==MPD_INFO_ENTITY_TYPE_SONG) {
+				mpd_Song * song = entity.info.song;
 				printf("%s\n",fromUtf8(song->file));
 			}
-			mpd_freeInfoEntity(entity);
 		}
 
 		my_finishCommand(conn);
@@ -660,7 +655,7 @@ int cmd_ls ( int argc, char ** argv, mpd_Connection * conn )
 
 int cmd_lsplaylists ( int argc, char ** argv, mpd_Connection * conn )
 {
-	mpd_InfoEntity * entity;
+	mpd_InfoEntity entity;
 	char * ls = "";
 	int i = 0;
 
@@ -670,13 +665,12 @@ int cmd_lsplaylists ( int argc, char ** argv, mpd_Connection * conn )
 		mpd_sendLsInfoCommand(conn,ls);
 		printErrorAndExit(conn);
 
-		while((entity = mpd_getNextInfoEntity(conn))) {
-			if(entity->type==
+		while(mpd_getNextInfoEntity_st(&entity,conn)) {
+			if(entity.type==
 					MPD_INFO_ENTITY_TYPE_PLAYLISTFILE) {
-				mpd_PlaylistFile * pl = entity->info.playlistFile;
+				mpd_PlaylistFile * pl = entity.info.playlistFile;
 				printf("%s\n",fromUtf8(pl->path));
 			}
-			mpd_freeInfoEntity(entity);
 		}
 
 		my_finishCommand(conn);
@@ -690,7 +684,7 @@ int cmd_load ( int argc, char ** argv, mpd_Connection * conn )
 	int i;
 	char * sp;
 	char * dp;
-	mpd_InfoEntity * entity;
+	mpd_InfoEntity entity;
 	mpd_PlaylistFile * pl;
 
 	for(i=0;i<argc;i++) {
@@ -700,9 +694,9 @@ int cmd_load ( int argc, char ** argv, mpd_Connection * conn )
 
 	mpd_sendLsInfoCommand(conn,"");
 	printErrorAndExit(conn);
-	while((entity = mpd_getNextInfoEntity(conn))) {
-		if(entity->type==MPD_INFO_ENTITY_TYPE_PLAYLISTFILE) {
-			pl = entity->info.playlistFile;
+	while(mpd_getNextInfoEntity_st(&entity,conn)) {
+		if(entity.type==MPD_INFO_ENTITY_TYPE_PLAYLISTFILE) {
+			pl = entity.info.playlistFile;
 			dp = sp = strdup(fromUtf8(pl->path));
 			while((sp = strchr(sp,' '))) *sp = '_';
 			for(i=0;i<argc;i++) {
@@ -710,7 +704,6 @@ int cmd_load ( int argc, char ** argv, mpd_Connection * conn )
 					strcpy(argv[i], fromUtf8(pl->path));
 			}
 			free(dp);
-			mpd_freeInfoEntity(entity);
 		}
 	}
 	my_finishCommand(conn);
@@ -730,7 +723,7 @@ int cmd_load ( int argc, char ** argv, mpd_Connection * conn )
 
 int cmd_search ( int argc, char ** argv, mpd_Connection * conn ) 
 {
-	mpd_InfoEntity * entity;
+	mpd_InfoEntity entity;
 	char * search;
 	int table = -1;
 	int i;
@@ -764,17 +757,16 @@ int cmd_search ( int argc, char ** argv, mpd_Connection * conn )
 		mpd_sendSearchCommand(conn,table,search);
 		printErrorAndExit(conn);
 
-		while((entity = mpd_getNextInfoEntity(conn))) {
+		while(mpd_getNextInfoEntity_st(&entity,conn)) {
 			printErrorAndExit(conn);
-			if(entity->type==MPD_INFO_ENTITY_TYPE_DIRECTORY) {
-				mpd_Directory * dir = entity->info.directory;
+			if(entity.type==MPD_INFO_ENTITY_TYPE_DIRECTORY) {
+				mpd_Directory * dir = entity.info.directory;
 				printf("%s\n",fromUtf8(dir->path));
 			}
-			else if(entity->type==MPD_INFO_ENTITY_TYPE_SONG) {
-				mpd_Song * song = entity->info.song;
+			else if(entity.type==MPD_INFO_ENTITY_TYPE_SONG) {
+				mpd_Song * song = entity.info.song;
 				printf("%s\n",fromUtf8(song->file));
 			}
-			mpd_freeInfoEntity(entity);
 		}
 
 		my_finishCommand(conn);
@@ -796,7 +788,7 @@ int cmd_volume ( int argc, char ** argv, mpd_Connection * conn )
 
 		printf("volume:%3i%c   \n",status->volume,'%');
 
-		mpd_freeStatus(status);
+		mpd_freeStatus_st(status);
 
 		return 0;
 	}
@@ -831,7 +823,7 @@ int cmd_repeat ( int argc, char ** argv, mpd_Connection * conn )
 		mpd_Status * status;
 		status = getStatus(conn);
 		mode = !status->repeat;
-		mpd_freeStatus(status);
+		mpd_freeStatus_st(status);
 	}
 
 
@@ -856,7 +848,7 @@ int cmd_random ( int argc, char ** argv, mpd_Connection * conn )
 		mpd_Status * status;
 		status = getStatus(conn);
 		mode = !status->random;
-		mpd_freeStatus(status);
+		mpd_freeStatus_st(status);
 	}
 
 	mpd_sendRandomCommand(conn,mode);
@@ -882,7 +874,7 @@ int cmd_crossfade ( int argc, char ** argv, mpd_Connection * conn )
 
 		printf("crossfade: %i\n",status->crossfade);
 
-		mpd_freeStatus(status);
+		mpd_freeStatus_st(status);
 		printErrorAndExit(conn);
 	}
 	return 0;
@@ -898,16 +890,16 @@ int cmd_version ( int argc, char ** argv, mpd_Connection * conn )
 
 int cmd_loadtab ( int argc, char ** argv, mpd_Connection * conn )
 {
-	mpd_InfoEntity * entity;
+	mpd_InfoEntity entity;
 	char * sp;
 	mpd_PlaylistFile * pl;
 
 	mpd_sendLsInfoCommand(conn,"");
 	printErrorAndExit(conn);
 
-	while((entity = mpd_getNextInfoEntity(conn))) {
-		if(entity->type==MPD_INFO_ENTITY_TYPE_PLAYLISTFILE) {
-			pl = entity->info.playlistFile;
+	while(mpd_getNextInfoEntity_st(&entity,conn)) {
+		if(entity.type==MPD_INFO_ENTITY_TYPE_PLAYLISTFILE) {
+			pl = entity.info.playlistFile;
 			sp = pl->path;
 			while((sp = strchr(sp,' '))) *sp = '_';
 			if(argc==1) {
@@ -918,7 +910,6 @@ int cmd_loadtab ( int argc, char ** argv, mpd_Connection * conn )
 				}
 			}
 		}
-		mpd_freeInfoEntity(entity);
 	}
 
 	my_finishCommand(conn);
@@ -927,16 +918,16 @@ int cmd_loadtab ( int argc, char ** argv, mpd_Connection * conn )
 
 int cmd_lstab ( int argc, char ** argv, mpd_Connection * conn )
 {
-	mpd_InfoEntity * entity;
+	mpd_InfoEntity entity;
 	char * sp;
 	mpd_Directory * dir;
 
 	mpd_sendListallCommand(conn,"");
 	printErrorAndExit(conn);
 
-	while((entity = mpd_getNextInfoEntity(conn))) {
-		if(entity->type==MPD_INFO_ENTITY_TYPE_DIRECTORY) {
-			dir = entity->info.directory;
+	while(mpd_getNextInfoEntity_st(&entity,conn)) {
+		if(entity.type==MPD_INFO_ENTITY_TYPE_DIRECTORY) {
+			dir = entity.info.directory;
 			sp = dir->path;
 			/* replace all ' ' with '_' */
 			while((sp = strchr(sp,' '))) *sp = '_';
@@ -948,7 +939,6 @@ int cmd_lstab ( int argc, char ** argv, mpd_Connection * conn )
 				}
 			}
 		}
-		mpd_freeInfoEntity(entity);
 	}
 
 	my_finishCommand(conn);
@@ -958,16 +948,16 @@ int cmd_lstab ( int argc, char ** argv, mpd_Connection * conn )
 
 int cmd_tab ( int argc, char ** argv, mpd_Connection * conn )
 {
-	mpd_InfoEntity * entity;
+	mpd_InfoEntity entity;
 	char * sp;
 	mpd_Song * song;
 
 	mpd_sendListallCommand(conn,"");
 	printErrorAndExit(conn);
 
-	while((entity = mpd_getNextInfoEntity(conn))) {
-		if(entity->type==MPD_INFO_ENTITY_TYPE_SONG) {
-			song = entity->info.song;
+	while(mpd_getNextInfoEntity_st(&entity,conn)) {
+		if(entity.type==MPD_INFO_ENTITY_TYPE_SONG) {
+			song = entity.info.song;
 			sp = song->file;
 			/* replace all ' ' with '_' */
 			while((sp = strchr(sp,' '))) *sp = '_';
@@ -980,7 +970,6 @@ int cmd_tab ( int argc, char ** argv, mpd_Connection * conn )
 			}
 			else printf("%s\n",fromUtf8(song->file));
 		}
-		mpd_freeInfoEntity(entity);
 	}
 
 	my_finishCommand(conn);
@@ -1017,25 +1006,24 @@ char * DHMS(unsigned long t)
 
 int cmd_stats ( int argc, char ** argv, mpd_Connection * conn )
 {
-	mpd_Stats *stats;
+	mpd_Stats stats;
 	time_t t;
 
 	mpd_sendStatsCommand(conn);
-	stats = mpd_getStats(conn);
-	printErrorAndExit(conn);
 
-	if (stats != NULL) {
-		t = stats->dbUpdateTime;
-		printf("Artists: %6d\n", stats->numberOfArtists);
-		printf("Albums:  %6d\n", stats->numberOfAlbums);
-		printf("Songs:   %6d\n", stats->numberOfSongs);
+	if (mpd_getStats_st(&stats,conn)) {
+		printErrorAndExit(conn);
+		t = stats.dbUpdateTime;
+		printf("Artists: %6d\n", stats.numberOfArtists);
+		printf("Albums:  %6d\n", stats.numberOfAlbums);
+		printf("Songs:   %6d\n", stats.numberOfSongs);
 		printf("\n");
-		printf("Play Time:    %s\n", DHMS(stats->playTime));
-		printf("Uptime:       %s\n", DHMS(stats->uptime));
+		printf("Play Time:    %s\n", DHMS(stats.playTime));
+		printf("Uptime:       %s\n", DHMS(stats.uptime));
 		printf("DB Updated:   %s", ctime(&t));	/* no \n needed */
-		printf("DB Play Time: %s\n", DHMS(stats->dbPlayTime));
-		mpd_freeStats(stats);
+		printf("DB Play Time: %s\n", DHMS(stats.dbPlayTime));
 	} else {
+		printErrorAndExit(conn);
 		printf("Error getting mpd stats\n");
 	}
 	return 0;

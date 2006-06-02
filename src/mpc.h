@@ -46,4 +46,6 @@ typedef int (* cmdhandler)(int argc, char ** argv, mpd_Connection * conn);
 #  define dbg(fmt, arg...) do { } while (0)
 #endif /* DEBUG */
 
+#define mpd_freeStatus_st(s) /* no-op */
+
 #endif /* MPC_H */

@@ -34,8 +34,12 @@
 #ifndef LIBMPDCLIENT_H
 #define LIBMPDCLIENT_H
 
+#ifdef WIN32
+        #define __W32API_USE_DLLIMPORT__ 1
+#endif
+#include <sys/param.h>
 #include <sys/time.h>
-
+#include <stdarg.h>
 #define MPD_BUFFER_MAX_LENGTH	50000
 #define MPD_WELCOME_MESSAGE	"OK MPD "
 
@@ -71,10 +75,32 @@
 extern "C" {
 #endif
 
+typedef enum mpd_TagItems
+{
+	MPD_TAG_ITEM_ARTIST,
+	MPD_TAG_ITEM_ALBUM,
+	MPD_TAG_ITEM_TITLE,
+	MPD_TAG_ITEM_TRACK,
+	MPD_TAG_ITEM_NAME,
+	MPD_TAG_ITEM_GENRE,
+	MPD_TAG_ITEM_DATE,
+	MPD_TAG_ITEM_COMPOSER,
+	MPD_TAG_ITEM_PERFORMER,
+	MPD_TAG_ITEM_COMMENT,
+	MPD_TAG_ITEM_DISC,
+	MPD_TAG_ITEM_FILENAME,
+	MPD_TAG_NUM_OF_ITEM_TYPES
+}mpd_TagItems;
+
+
+extern char * mpdTagItemKeys[MPD_TAG_NUM_OF_ITEM_TYPES];
+
+	
+
 /* internal stuff don't touch this struct */
 typedef struct _mpd_ReturnElement {
-	char * name;
-	char * value;
+	char name[0x10];          /* longest here is "playlistlength" */
+	char value[MAXPATHLEN];
 } mpd_ReturnElement;
 
 /* mpd_Connection
@@ -99,19 +125,20 @@ typedef struct _mpd_Connection {
 	int listOks;
 	int doneListOk;
 	int commandList;
-	mpd_ReturnElement * returnElement;
+	mpd_ReturnElement returnElement;
 	struct timeval timeout;
+	char *request;
 } mpd_Connection;
 
-/* mpd_newConnection
+/* mpd_newConnection_st
  * use this to open a new connection
  * you should use mpd_closeConnection, when your done with the connection,
  * even if an error has occurred
  * _timeout_ is the connection timeout period in seconds
  */
-mpd_Connection * mpd_newConnection(const char * host, int port, float timeout);
-
-void mpd_setConnectionTimeout(mpd_Connection * connection, float timeout);
+void mpd_newConnection_st(mpd_Connection * connection, const char * host,
+		int port, int timeout);
+void mpd_setConnectionTimeout(mpd_Connection * connection, int timeout);
 
 /* mpd_closeConnection
  * use this to close a connection and free'ing subsequent memory
@@ -181,11 +208,17 @@ typedef struct mpd_Status {
 
 void mpd_sendStatusCommand(mpd_Connection * connection);
 
-/* mpd_getStatus
- * returns status info, be sure to free it with mpd_freeStatus()
+/* mpd_getStatus_st
+ * like the non-_st version, but takes a static (or pre-allocated)
+ * pointer; returns 1 if status is set, otherwise 0 on error
  * call this after mpd_sendStatusCommand()
  */
-mpd_Status * mpd_getStatus(mpd_Connection * connection);
+unsigned int mpd_getStatus_st(mpd_Status *status, mpd_Connection * connection);
+
+/* mpd_statusReset
+ * reset all values in a mpd_Status structure back to their defaults
+ */
+void mpd_statusReset(mpd_Status *status);
 
 /* mpd_freeStatus
  * free's status info malloc'd and returned by mpd_getStatus
@@ -204,9 +237,7 @@ typedef struct _mpd_Stats {
 
 void mpd_sendStatsCommand(mpd_Connection * connection);
 
-mpd_Stats * mpd_getStats(mpd_Connection * connection);
-
-void mpd_freeStats(mpd_Stats * stats);
+unsigned int mpd_getStats_st(mpd_Stats * stats, mpd_Connection * connection);
 
 /* SONG STUFF */
 
@@ -235,8 +266,14 @@ typedef struct _mpd_Song {
 	char *date;
 
 	/* added by qball */
+	/* Genre */
 	char *genre;
+	/* Composer */
 	char *composer;
+	/* Disc */
+	char *disc;
+	/* Comment */
+	char *comment;
 
 	/* length of song in seconds, check that it is not MPD_SONG_NO_TIME  */
 	int time;
@@ -349,10 +386,16 @@ mpd_InfoEntity * mpd_newInfoEntity(void);
 
 void mpd_freeInfoEntity(mpd_InfoEntity * entity);
 
+/* free internally allocated memory used by mpd_getNextInfoEntity_st(),
+ * only do this once per session (at the end of your program) if you want
+ * the benefits of mpd_getNextInfoEntity_st() over the non-st version */
+void mpd_freeInfoEntityInfo_st(void);
+
 /* INFO COMMANDS AND STUFF */
 
 /* use this function to loop over after calling Info/Listall functions */
-mpd_InfoEntity * mpd_getNextInfoEntity(mpd_Connection * connection);
+/* returns 1 if the entity is set, 0 if not */
+unsigned int mpd_getNextInfoEntity_st(mpd_InfoEntity *, mpd_Connection *);
 
 /* fetches the currently seeletect song (the song referenced by status->song
  * and status->songid*/
@@ -404,6 +447,8 @@ void mpd_sendFindCommand(mpd_Connection * connection, int table,
 char * mpd_getNextArtist(mpd_Connection * connection);
 
 char * mpd_getNextAlbum(mpd_Connection * connection);
+
+char * mpd_getNextTag(mpd_Connection *connection, int table);
 
 /* list artist or albums by artist, arg1 should be set to the artist if
  * listing albums by a artist, otherwise NULL for listing all artists or albums
@@ -467,7 +512,7 @@ void mpd_sendVolumeCommand(mpd_Connection * connection, int volumeChange);
 
 void mpd_sendCrossfadeCommand(mpd_Connection * connection, int seconds);
 
-void mpd_sendUpdateCommand(mpd_Connection * connection, char * path);
+void mpd_sendUpdateCommand(mpd_Connection * connection, const char * path);
 
 /* returns the update job id, call this after a update command*/
 int mpd_getUpdateId(mpd_Connection * connection);
@@ -506,6 +551,90 @@ void mpd_sendEnableOutputCommand(mpd_Connection * connection, int outputId);
 void mpd_sendDisableOutputCommand(mpd_Connection * connection, int outputId);
 
 void mpd_freeOutputElement(mpd_OutputEntity * output);
+
+
+/**
+ * @param connection a #mpd_Connection
+ *
+ * Queries mpd for the allowed commands
+ */
+void mpd_sendCommandsCommand(mpd_Connection * connection);
+/**
+ * @param connection a #mpd_Connection
+ *
+ * Queries mpd for the not allowed commands
+ */
+void mpd_sendNotCommandsCommand(mpd_Connection * connection);
+
+
+/**
+ * @param connection a #mpd_Connection
+ *
+ * returns the next supported command.
+ *
+ * @returns a string, needs to be free'ed
+ */
+char *mpd_getNextCommand(mpd_Connection *connection);
+
+
+/**
+ * @param connection a MpdConnection
+ * @param path	the path to the playlist. 
+ * 
+ * List the content, with full metadata, of a stored playlist.
+ * 
+ */
+void mpd_sendListPlaylistInfoCommand(mpd_Connection *connection, const char *path);
+/**
+ * @param connection a MpdConnection
+ * @param path	the path to the playlist. 
+ * 
+ * List the content of a stored playlist.
+ * 
+ */
+void mpd_sendListPlaylistCommand(mpd_Connection *connection, const char *path);
+
+/**
+ * @param connection a #mpd_Connection
+ * @param exact if to match exact
+ *
+ * starts a search, use mpd_addConstraintSearch to add 
+ * a constraint to the search, and mpd_commitSearch to do the actual search
+ */
+void mpd_startSearch(mpd_Connection * connection,int exact);
+/**
+ * @param connection a #mpd_Connection
+ * @param field
+ * @param name
+ *
+ */
+void mpd_addConstraintSearch(mpd_Connection *connection, int field, char *name);
+/**
+ * @param connection a #mpd_Connection
+ *
+ */
+void mpd_commitSearch(mpd_Connection *connection);
+
+/**
+ * @param connection a #mpd_Connection
+ * @param field The field to search
+ *
+ * starts a search for fields... f.e. get a list of artists would be:
+ * mpd_startFieldSearch(connection, MPD_TAG_ITEM_ARTIST);
+ * mpd_commitSearch(connection);
+ *
+ * or get a list of artist in genre "jazz" would be:
+ * @code
+ * mpd_startFieldSearch(connection, MPD_TAG_ITEM_ARTIST);
+ * mpd_addConstraintSearch(connection, MPD_TAG_ITEM_GENRE, "jazz")
+ * mpd_commitSearch(connection);
+ * @endcode
+ *
+ * mpd_startSearch will return  a list of songs (and you need mpd_getNextInfoEntity)
+ * this one will return a list of only one field (the field specified with field) and you need
+ * mpd_getNextTag to get the results
+ */
+void mpd_startFieldSearch(mpd_Connection * connection,int field);
 
 #ifdef __cplusplus
 }
