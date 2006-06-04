@@ -32,6 +32,8 @@ void print_status (mpd_Connection *conn)
 	mpd_Status status;
 	mpd_InfoEntity entity;
 
+	status.error = NULL;
+
 	mpd_sendCommandListOkBegin(conn);
 	printErrorAndExit(conn);
 	mpd_sendStatusCommand(conn);
