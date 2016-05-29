@@ -100,7 +100,8 @@ cmd_current(gcc_unused int argc, gcc_unused char **argv,
 		printErrorAndExit(conn);
 
 	if (mpd_status_get_state(status) == MPD_STATE_PLAY ||
-	    mpd_status_get_state(status) == MPD_STATE_PAUSE) {
+	    mpd_status_get_state(status) == MPD_STATE_PAUSE ||
+	    mpd_status_get_state(status) == MPD_STATE_STOP) {
 		if (!mpd_response_next(conn))
 			printErrorAndExit(conn);
 
